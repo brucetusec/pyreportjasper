@@ -50,10 +50,26 @@ class Report:
             raise NameError('Library directory not found at {0}'.format(self.LIB_PATH))
         self.config = config
         if not jpype.isJVMStarted():
-            classpath = [
-                os.path.join(self.LIB_PATH, "*"),
-                os.path.join(self.JDBC_PATH, "*"),
-            ]
+            search_root = self.LIB_PATH # '/home/docker/pyreportjasper/pyreportjasper/libs'
+            all_jars_classpath = []
+            found_jars = []
+            for root, dirs, files in os.walk(search_root):
+                for file in files:
+                    if file.endswith(".jar"):
+                        # append the parent directory of the jar file
+                        found_jars.append(root + os.sep + file)
+                        all_jars_classpath.append(root)
+            # distinct the list
+            all_jars_classpath = list(set(all_jars_classpath))
+            classpath = [os.path.join(self.LIB_PATH, "*"), os.path.join(self.LIB_PATH), os.path.join(self.JDBC_PATH, "*")]
+            classpath.extend([os.path.join(_, "*") for _ in all_jars_classpath])
+
+            # classpath = [
+            #     os.path.join(self.LIB_PATH, "*"),
+            #     os.path.join(self.LIB_PATH),
+            #     os.path.join(self.JDBC_PATH, "*"),
+            #     # "/home/docker/pyreportjasper/pyreportjasper/libs/.plugins/com.jaspersoft.studio.bundles.poi/extractedJars/*",
+            # ]
 
             if self.config.resource and os.path.isdir(self.config.resource):
                 classpath.append(os.path.join(self.config.resource, "*"))
@@ -112,8 +128,9 @@ class Report:
         self.ByteArrayInputStream = jpype.JPackage('java').io.ByteArrayInputStream
         self.ByteArrayOutputStream = jpype.JPackage('java').io.ByteArrayOutputStream
         self.ApplicationClasspath = jpype.JPackage('br').com.acesseonline.classpath.ApplicationClasspath
+        self.JacksonObjectMapper = jpype.JPackage('com').fasterxml.jackson.databind.ObjectMapper
 
-        if self.config.useJaxen:
+        if False and self.config.useJaxen:
             self.DefaultJasperReportsContext = jpype.JPackage('net').sf.jasperreports.engine.DefaultJasperReportsContext
             self.context = self.DefaultJasperReportsContext.getInstance();
             self.JRPropertiesUtil = jpype.JPackage('net').sf.jasperreports.engine.JRPropertiesUtil
@@ -129,7 +146,7 @@ class Report:
             self.input_file = input_file
         else:
             raise NameError('input_file does not have a valid type. Please enter the file path or its bytes')
-                
+
         # self.input_file = input_file
         self.defaultLocale = self.Locale.getDefault()
         if self.config.has_resource():
@@ -228,7 +245,10 @@ class Report:
             if isinstance(self.config.params[key], dict):
                 param_dict = self.config.params[key]
                 type_var = param_dict.get('type')
-                if isinstance(type_var, self.TypeJava):
+                if type_var == 'json':
+                    value_java = self.convert_python_object_to_java_JsonNode(param_dict.get('value'))
+                    parameters.put(key, value_java)
+                elif isinstance(type_var, self.TypeJava):
                     type_instance_java = type_var.value
                     type_name = type_var.name
                     if type_instance_java:
@@ -333,8 +353,22 @@ class Report:
                 con = db.get_connection(self.config)
                 self.jasper_print = self.jvJasperFillManager.fillReport(self.jasper_report, parameters, con)
                 con.close()
+        
+        except jpype.JException as exception:
+            print(exception.message())
+            print(exception.stacktrace())
+            raise NameError('Error fill internal: {} {}'.format(exception.message(), exception.stacktrace()))
         except Exception as ex:
             raise NameError('Erro fill internal: {}'.format(str(ex)))
+
+    def convert_python_object_to_java_JsonNode(self, json_str):
+        # com.fasterxml.jackson.databind.JsonNode
+        """
+        Convert a Python dictionary to a JsonNode object
+        :param json_str: str
+        :return: JsonNode object
+        """
+        return self.JacksonObjectMapper().readTree(json_str)
 
     def get_output_stream(self, suffix):
         """
