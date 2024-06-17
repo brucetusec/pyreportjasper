@@ -203,10 +203,12 @@ class Report:
                     jasper_file_subreport = str(sub_report_without_ext) + '.jasper'
                     if ext_sub_report == '.jrxml':
                         print("Compiling: {}".format(subreport_file))
-                        self.jvJasperCompileManager.compileReportToFile(subreport_file, jasper_file_subreport)                    
+                        self.jvJasperCompileManager.compileReportToFile(subreport_file, jasper_file_subreport)
                     self.jasper_subreports[subreport_name] = self.jvJasperCompileManager.compileReport(subreport_jasper_design)
-            except Exception:
-                raise NameError('input file: {0} is not a valid jrxml file'.format(subreport_name))        
+            except Exception as ex:
+                raise NameError(
+                    'input file: {0} is not a valid jrxml file: ERROR: {1}'\
+                    .format(subreport_name, str(ex)))
 
     def compile(self):
         # TODO: Avoid WARNING at first loading when compiling design into report.
